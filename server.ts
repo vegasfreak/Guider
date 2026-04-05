@@ -6,20 +6,15 @@ import session from "express-session";
 import cookieParser from "cookie-parser";
 import { drizzle } from 'drizzle-orm/better-sqlite3';
 import Database from 'better-sqlite3';
+import { migrate } from 'drizzle-orm/better-sqlite3/migrator';
 import { users, moods, journals, settings, userStats } from './src/db/schema';
 import { eq, and, desc } from 'drizzle-orm';
-import path from 'path';
-import { fileURLToPath } from 'url';
 
-const __filename = fileURLToPath(import.meta.url);
-const __dirname = path.dirname(__filename);
-
-// Initialize DB with persistent path for Render
-const dbPath = process.env.RENDER ? '/var/data/sqlite.db' : 'sqlite.db';
-const sqlite = new Database(dbPath);
+// Initialize DB
+const sqlite = new Database('sqlite.db');
 const db = drizzle(sqlite);
 
-// Create tables if they don't exist
+// Simple migration (for demo purposes, in production use drizzle-kit)
 sqlite.exec(`
   CREATE TABLE IF NOT EXISTS users (
     id INTEGER PRIMARY KEY AUTOINCREMENT,
@@ -62,17 +57,17 @@ async function startServer() {
   const server = createServer(app);
   const wss = new WebSocketServer({ server });
 
-  const PORT = process.env.PORT || 3000;
+  const PORT = 3000;
 
   app.use(express.json());
   app.use(cookieParser());
   app.use(session({
-    secret: process.env.SESSION_SECRET || 'mindguide-secret-key',
+    secret: 'mindguide-secret-key',
     resave: false,
     saveUninitialized: false,
     cookie: { 
-      secure: process.env.NODE_ENV === 'production',
-      sameSite: process.env.NODE_ENV === 'production' ? 'none' : 'lax',
+      secure: true, 
+      sameSite: 'none',
       maxAge: 1000 * 60 * 60 * 24 * 7 // 1 week
     }
   }));
@@ -136,12 +131,12 @@ async function startServer() {
 
   // Helper to generate mock data
   const generateMockMoods = (userId: number) => {
-    const moodsList: any[] = [];
+    const moods: any[] = [];
     const now = Date.now();
     const labels = ['Great', 'Good', 'Okay', 'Down', 'Stressed'];
     for (let i = 1; i <= 7; i++) {
-      moodsList.push({
-        id: -i,
+      moods.push({
+        id: -i, // Use negative ID to distinguish from real DB IDs
         userId: userId,
         score: Math.floor(Math.random() * 5) + 1,
         label: labels[Math.floor(Math.random() * labels.length)],
@@ -149,14 +144,14 @@ async function startServer() {
         timestamp: now - (i * 24 * 60 * 60 * 1000)
       });
     }
-    return moodsList;
+    return moods;
   };
 
   const generateMockJournals = (userId: number) => {
-    const journalsList: any[] = [];
+    const journals: any[] = [];
     const now = Date.now();
     for (let i = 1; i <= 5; i++) {
-      journalsList.push({
+      journals.push({
         id: -i,
         userId: userId,
         content: JSON.stringify({
@@ -167,7 +162,7 @@ async function startServer() {
         timestamp: now - (i * 48 * 60 * 60 * 1000)
       });
     }
-    return journalsList;
+    return journals;
   };
 
   // Mood Routes
@@ -199,9 +194,11 @@ async function startServer() {
     const today = new Date().toDateString();
     const todayTimestamp = new Date(today).getTime();
     
+    // Get current stats
     let [currentStats] = await db.select().from(userStats).where(eq(userStats.userId, userId));
     
     if (!currentStats) {
+      // Create new stats entry
       await db.insert(userStats).values({
         userId,
         streak: 1,
@@ -209,10 +206,12 @@ async function startServer() {
         lastCheckInDate: todayTimestamp
       });
     } else {
+      // Check if last check-in was today
       const lastCheckInDate = new Date(currentStats.lastCheckInDate).toDateString();
       let newStreak = currentStats.streak;
       
       if (lastCheckInDate !== today) {
+        // Check if it was yesterday
         const yesterday = new Date(today);
         yesterday.setDate(yesterday.getDate() - 1);
         
@@ -262,9 +261,11 @@ async function startServer() {
     const today = new Date().toDateString();
     const todayTimestamp = new Date(today).getTime();
     
+    // Get current stats
     let [currentStats] = await db.select().from(userStats).where(eq(userStats.userId, userId));
     
     if (!currentStats) {
+      // Create new stats entry
       await db.insert(userStats).values({
         userId,
         streak: 1,
@@ -272,10 +273,12 @@ async function startServer() {
         lastCheckInDate: todayTimestamp
       });
     } else {
+      // Check if last check-in was today
       const lastCheckInDate = new Date(currentStats.lastCheckInDate).toDateString();
       let newStreak = currentStats.streak;
       
       if (lastCheckInDate !== today) {
+        // Check if it was yesterday
         const yesterday = new Date(today);
         yesterday.setDate(yesterday.getDate() - 1);
         
@@ -307,6 +310,7 @@ async function startServer() {
     let [stats] = await db.select().from(userStats).where(eq(userStats.userId, userId));
     
     if (!stats) {
+      // Create default stats
       [stats] = await db.insert(userStats).values({
         userId,
         streak: 0,
@@ -315,11 +319,12 @@ async function startServer() {
       }).returning();
     }
     
+    // Count actual moods and journal entries
     const userMoods = await db.select().from(moods).where(eq(moods.userId, userId));
     const userJournals = await db.select().from(journals).where(eq(journals.userId, userId));
     
-    const totalReflections = userJournals.length;
-    const totalCheckIns = userMoods.length;
+    const totalReflections = userJournals.length; // Reflections = journal entries only
+    const totalCheckIns = userMoods.length; // Check-ins = mood entries only
     
     res.json({
       id: stats.id,
@@ -331,7 +336,7 @@ async function startServer() {
     });
   });
 
-  // WebSocket peer matching
+  // Peer matching state
   interface WaitingUser {
     ws: WebSocket;
     id: string;
@@ -354,10 +359,11 @@ async function startServer() {
         if (message.type === "join") {
           const { topic, format, intent, identity } = message;
           
+          // Try to find a match
           const matchIndex = waitingUsers.findIndex(u => 
             u.topic === topic && 
             u.format === format && 
-            (u.intent !== intent || topic === 'General')
+            (u.intent !== intent || topic === 'General') // Match different intents, or anyone if General
           );
 
           if (matchIndex !== -1) {
@@ -382,13 +388,14 @@ async function startServer() {
               peerIdentity: identity 
             }));
           } else {
+            // No match, put in waiting list
             const timer = setTimeout(() => {
               const idx = waitingUsers.findIndex(u => u.ws === ws);
               if (idx !== -1) {
                 waitingUsers.splice(idx, 1);
                 ws.send(JSON.stringify({ type: "no_users" }));
               }
-            }, 45000);
+            }, 45000); // 45 seconds timeout
 
             waitingUsers.push({ ws, id: Math.random().toString(36).substring(7), topic, format, intent, identity, timer });
             ws.send(JSON.stringify({ type: "waiting" }));
@@ -413,12 +420,14 @@ async function startServer() {
     });
 
     ws.on("close", () => {
+      // Remove from waiting list
       const idx = waitingUsers.findIndex(u => u.ws === ws);
       if (idx !== -1) {
         clearTimeout(waitingUsers[idx].timer);
         waitingUsers.splice(idx, 1);
       }
 
+      // Notify room if in one
       const roomId = socketToRoom.get(ws);
       if (roomId) {
         const room = activeRooms.get(roomId);
@@ -439,26 +448,20 @@ async function startServer() {
     });
   });
 
-  // Serve static files in production
-  if (process.env.NODE_ENV === "production") {
-    app.use(express.static(path.join(__dirname, "dist")));
-    app.get("*", (req, res) => {
-      res.sendFile(path.join(__dirname, "dist", "index.html"));
-    });
-  } else {
-    // Vite middleware for development
+  // Vite middleware for development
+  if (process.env.NODE_ENV !== "production") {
     const vite = await createViteServer({
       server: { middlewareMode: true },
       appType: "spa",
     });
     app.use(vite.middlewares);
+  } else {
+    app.use(express.static("dist"));
   }
 
-  server.listen(Number(PORT), "0.0.0.0", () => {
+  server.listen(PORT, "0.0.0.0", () => {
     console.log(`Server running on http://0.0.0.0:${PORT}`);
-    console.log(` WebSocket server is ready`);
-    console.log(`Database path: ${dbPath}`);
   });
 }
 
-startServer().catch(console.error);
+startServer();
