@@ -1,0 +1,7 @@
+{
+  "name": "MindGuide Student Mental Health Companion",
+  "description": "A supportive, non-clinical mental health app for students featuring reflective AI chat, mood tracking, structured journaling, and evidence-based exercises.",
+  "requestFramePermissions": [
+    "microphone"
+  ]
+}

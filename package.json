@@ -1,0 +1,50 @@
+{
+  "name": "mindguide-student-mental-health-companion",
+  "private": true,
+  "version": "0.0.0",
+  "type": "module",
+  "scripts": {
+    "dev": "tsx server.ts",
+    "build": "vite build",
+    "preview": "vite preview",
+    "lint": "tsc --noEmit",
+    "test": "vitest",
+    "start": "tsx server.ts",
+    "render-start": "tsx server.ts"
+  },
+  "dependencies": {
+    "@capacitor/android": "^8.2.0",
+    "@capacitor/cli": "^8.2.0",
+    "@capacitor/core": "^8.2.0",
+    "@capacitor/local-notifications": "^8.2.0",
+    "@google/genai": "^1.42.0",
+    "@tailwindcss/vite": "^4.2.1",
+    "better-sqlite3": "^12.6.2",
+    "cookie-parser": "^1.4.7",
+    "drizzle-orm": "^0.45.1",
+    "express": "^5.2.1",
+    "express-session": "^1.19.0",
+    "lucide-react": "^0.577.0",
+    "motion": "^12.34.5",
+    "react": "^19.2.4",
+    "react-dom": "^19.2.4",
+    "recharts": "^3.7.0",
+    "tailwindcss": "^4.2.1",
+    "tsx": "^4.21.0",
+    "ws": "^8.19.0"
+  },
+  "devDependencies": {
+    "@types/better-sqlite3": "^7.6.13",
+    "@types/cookie-parser": "^1.4.10",
+    "@types/express": "^5.0.6",
+    "@types/express-session": "^1.18.2",
+    "@types/node": "^22.14.0",
+    "@types/react": "^19.2.14",
+    "@types/react-dom": "^19.2.3",
+    "@types/ws": "^8.18.1",
+    "@vitejs/plugin-react": "^5.0.0",
+    "drizzle-kit": "^0.31.9",
+    "typescript": "~5.8.2",
+    "vite": "^6.2.0"
+  }
+}
